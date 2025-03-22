@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aplicación de Tareas</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Lista de Tareas</h1>
+            <div class="environment-info">
+                <p><strong>Entorno:</strong> <%= environment %></p>
+                <p><strong>Base de Datos:</strong> <%= dbType %></p>
+                <p><strong>Servidor Web:</strong> <%= webServer %></p>
+            </div>
+        </header>
+        
+        <section class="task-form">
+            <h2>Añadir Nueva Tarea</h2>
+            <form action="/tasks" method="POST">
+                <div class="form-group">
+                    <label for="title">Título:</label>
+                    <input type="text" id="title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Descripción:</label>
+                    <textarea id="description" name="description" rows="3"></textarea>
+                </div>
+                <button type="submit">Guardar Tarea</button>
+            </form>
+        </section>
+        
+        <section class="tasks-list">
+            <h2>Tareas Existentes</h2>
+            <% if (typeof dbError !== 'undefined' && dbError) { %>
+                <div class="error-message">
+                    <p>Error de conexión con la base de datos. Por favor, verifica que la base de datos esté disponible y que las credenciales sean correctas.</p>
+                    <p>Puedes intentar refrescar la página en unos momentos.</p>
+                </div>
+            <% } else if (tasks.length === 0) { %>
+                <p class="no-tasks">No hay tareas registradas</p>
+            <% } else { %>
+                <ul>
+                    <% tasks.forEach(task => { %>
+                        <li class="task-item">
+                            <h3><%= task.title %></h3>
+                            <p><%= task.description %></p>
+                            <small>Creada: <%= new Date(task.created_at).toLocaleString() %></small>
+                        </li>
+                    <% }); %>
+                </ul>
+            <% } %>
+        </section>
+    </div>
+</body>
+</html>
