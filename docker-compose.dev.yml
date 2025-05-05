@@ -1,0 +1,27 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: tasks-app-dev
+    restart: unless-stopped
+    #network_mode: "bridge"  # Usamos el modo bridge por defecto
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - DB_HOST=172.19.0.20
+      - DB_USER=dev_app_user
+      - DB_PASSWORD=slapadmin
+      - DB_NAME=test_db
+      - DB_PORT=3306
+    networks:
+      - traefik_traefik-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tasksapp.rule=Host(`tasks.desarrollo.local`)"
+      - "traefik.http.routers.tasksapp.entrypoints=webdev"
+      - "traefik.http.services.tasksapp.loadbalancer.server.port=3000"
+
+networks:
+  traefik_traefik-net:
+    external: true
