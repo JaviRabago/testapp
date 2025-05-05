@@ -1,1 +1,17 @@
-
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: tasks-app-prod
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_HOST=172.18.0.20
+      - DB_USER=dev1
+      - DB_PASSWORD=slapadmin
+      - DB_NAME=tasks_prod_db
+      - DB_PORT=5432
