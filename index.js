@@ -4,7 +4,7 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Base de datos
+// Configuración de base de datos
 const dbConfig = {
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -20,14 +20,14 @@ if (process.env.NODE_ENV === 'production') {
   db = new Pool(dbConfig);
   console.log('Conectado a PostgreSQL en modo producción');
 } else {
-// MySQL para desarrollo con biblioteca mysql en lugar de mysql2
+  // MySQL para desarrollo
   const mysql = require('mysql');
   db = mysql.createPool({
     ...dbConfig,
     insecureAuth: true
   });
 
-  // Convertir las funciones de callback a promesas para mantener consistencia con el código
+  // Convertir las funciones de callback a promesas para mantener consistencia
   const util = require('util');
   db.query = util.promisify(db.query).bind(db);
 
@@ -87,10 +87,27 @@ async function initializeDatabase() {
     }
 
     if (process.env.NODE_ENV === 'production') {
-      // PostgreSQL (mantener este código sin cambios)
-      // ...
+      // PostgreSQL
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS tasks (
+          id SERIAL PRIMARY KEY,
+          title VARCHAR(255) NOT NULL,
+          description TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Insertar una tarea de ejemplo si la tabla está vacía
+      const result = await db.query('SELECT COUNT(*) FROM tasks');
+      if (parseInt(result.rows[0].count) === 0) {
+        await db.query(
+          'INSERT INTO tasks (title, description) VALUES ($1, $2)',
+          ['Tarea de ejemplo', 'Esta es una tarea de ejemplo para mostrar que la base de datos funciona correctamente en producción']
+        );
+        console.log('Tarea de ejemplo creada en PostgreSQL');
+      }
     } else {
-      // MariaDB
+      // MySQL para desarrollo
       await db.query(`
         CREATE TABLE IF NOT EXISTS tasks (
           id INT AUTO_INCREMENT PRIMARY KEY,
@@ -102,18 +119,14 @@ async function initializeDatabase() {
 
       // Insertar una tarea de ejemplo si la tabla está vacía
       const result = await db.query('SELECT COUNT(*) as count FROM tasks');
-      // El resultado de mysql es diferente al de mysql2/promise
-      console.log("Resultado de consulta COUNT:", result); // Para depuración
-
-      // Ajustamos cómo accedemos al count
       const count = result[0]?.count || 0;
 
       if (count === 0) {
         await db.query(
           'INSERT INTO tasks (title, description) VALUES (?, ?)',
-          ['Tarea de ejemplo', 'Esta es una tarea de ejemplo para mostrar que la base de datos funciona correctamente']
+          ['Tarea de ejemplo', 'Esta es una tarea de ejemplo para mostrar que la base de datos funciona correctamente en desarrollo']
         );
-        console.log('Tarea de ejemplo creada en MariaDB');
+        console.log('Tarea de ejemplo creada en MySQL');
       }
     }
 
@@ -125,8 +138,7 @@ async function initializeDatabase() {
   }
 }
 
-
-// Ruta principal
+// Rutas - Ruta principal única
 app.get('/', async (req, res) => {
   try {
     let tasks = [];
@@ -138,9 +150,8 @@ app.get('/', async (req, res) => {
         const result = await db.query('SELECT * FROM tasks ORDER BY created_at DESC');
         tasks = result.rows;
       } else {
-        // MariaDB/MySQL
+        // MySQL
         tasks = await db.query('SELECT * FROM tasks ORDER BY created_at DESC');
-        // No necesitamos acceder a [rows] como con mysql2/promise
       }
     } catch (dbErr) {
       console.error('Error al obtener tareas de la base de datos:', dbErr);
@@ -161,6 +172,7 @@ app.get('/', async (req, res) => {
   }
 });
 
+// Ruta para crear nuevas tareas
 app.post('/tasks', async (req, res) => {
   const { title, description } = req.body;
 
@@ -186,41 +198,6 @@ app.post('/tasks', async (req, res) => {
   }
 });
 
-// Mejorar manejo de errores en la ruta principal
-app.get('/', async (req, res) => {
-  try {
-    let tasks = [];
-    let dbError = false;
-
-    try {
-      if (process.env.NODE_ENV === 'production') {
-        // PostgreSQL
-        const result = await db.query('SELECT * FROM tasks ORDER BY created_at DESC');
-        tasks = result.rows;
-      } else {
-        // MySQL
-        const [rows] = await db.query('SELECT * FROM tasks ORDER BY created_at DESC');
-        tasks = rows;
-      }
-    } catch (dbErr) {
-      console.error('Error al obtener tareas de la base de datos:', dbErr);
-      dbError = true;
-      tasks = [];
-    }
-
-    res.render('index', {
-      tasks,
-      environment: process.env.NODE_ENV,
-      dbType: process.env.NODE_ENV === 'production' ? 'PostgreSQL' : 'MySQL',
-      webServer: process.env.NODE_ENV === 'production' ? 'Nginx' : 'Apache',
-      dbError
-    });
-  } catch (err) {
-    console.error('Error general al procesar la solicitud:', err);
-    res.status(500).send('Error interno del servidor');
-  }
-});
-
 // Iniciar servidor
 const startServer = async () => {
   const dbInitialized = await initializeDatabase();
@@ -231,5 +208,3 @@ const startServer = async () => {
     console.log(`Base de datos inicializada correctamente: ${dbInitialized ? 'Sí' : 'No'}`);
   });
 };
-
-startServer();
