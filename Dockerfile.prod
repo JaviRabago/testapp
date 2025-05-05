@@ -1,0 +1,23 @@
+FROM node:16
+WORKDIR /app
+
+# Instalar dependencias de PostgreSQL
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar archivos de dependencias primero para aprovechar la caché de Docker
+COPY package*.json ./
+RUN npm install
+
+# Copiar el resto de archivos de la aplicación
+COPY . .
+
+# Hacer ejecutable el script wrapper para producción
+RUN chmod +x ./app-prod-wrapper.sh
+
+# Puerto que expondrá la aplicación
+EXPOSE 3000
+
+# Usar el wrapper como comando de inicio
+CMD ["./app-prod-wrapper.sh"]
