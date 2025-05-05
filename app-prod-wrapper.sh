@@ -1,11 +1,13 @@
 #!/bin/sh
-# Script para configurar la ruta predeterminada y luego ejecutar la aplicación Node.js
+# Script para ejecutar la aplicación Node.js en producción
 
-# Configurar la ruta predeterminada para la red de producción
-echo "Configurando ruta predeterminada via 172.30.0.2..."
-ip route del default 2>/dev/null || true
-ip route add default via 172.30.0.2
+# Esperar a que la base de datos PostgreSQL esté disponible
+echo "Esperando a que la base de datos PostgreSQL esté disponible..."
+while ! pg_isready -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME; do
+  sleep 2
+done
 
-# Ejecutar la aplicación Node.js
-echo "Iniciando aplicación Node.js..."
+# Ejecutar la aplicación Node.js en modo producción
+echo "Iniciando aplicación Node.js en modo producción..."
+export NODE_ENV=production
 exec node index.js
