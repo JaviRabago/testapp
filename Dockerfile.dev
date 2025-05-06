@@ -1,19 +1,16 @@
 FROM node:16
-
 WORKDIR /app
 
-# Copiar archivos de dependencias primero para aprovechar la caché de Docker
+# Copiar package.json primero
 COPY package*.json ./
 RUN npm install
 
-# Copiar el resto de archivos de la aplicación
-COPY . .
-
-# Hacer ejecutable el script wrapper para desarrollo
+# Copiar el script wrapper
+COPY app-dev-wrapper.sh ./
 RUN chmod +x ./app-dev-wrapper.sh
 
 # Puerto que expondrá la aplicación
 EXPOSE 3000
 
-# Usar el wrapper como comando de inicio
-CMD ["./app-dev-wrapper.sh"]
+# CAMBIO AQUÍ: Ejecutar con shell en lugar de con Node.js
+CMD ["/bin/sh", "./app-dev-wrapper.sh"]

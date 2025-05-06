@@ -5,7 +5,6 @@ services:
       dockerfile: Dockerfile.dev
     container_name: tasks-app-dev
     restart: unless-stopped
-    
     environment:
       - NODE_ENV=development
       - PORT=3000
@@ -21,7 +20,9 @@ services:
       - "traefik.http.routers.tasksapp.rule=Host(`tasks.desarrollo.local`)"
       - "traefik.http.routers.tasksapp.entrypoints=webdev"
       - "traefik.http.services.tasksapp.loadbalancer.server.port=3000"
-
+    volumes:
+      - .:/app                # Monta el directorio actual en /app del contenedor
+      - /app/node_modules     # Preserva node_modules del contenedor
 networks:
   traefik_traefik-net:
     external: true
