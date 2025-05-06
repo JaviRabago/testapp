@@ -58,6 +58,9 @@ pipeline {
                         scp /tmp/tasks-app-dev.tar.gz jenkins-deploy@172.19.0.10:/tmp/
                         ssh jenkins-deploy@172.19.0.10 'gunzip -c /tmp/tasks-app-dev.tar.gz | docker load'
                         
+                        # Detener y eliminar contenedores existentes antes de iniciar nuevos
+                        ssh jenkins-deploy@172.19.0.10 'docker rm -f tasks-app-dev || true'
+                        
                         # Desplegar con docker compose
                         ssh jenkins-deploy@172.19.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
                     '''
@@ -119,6 +122,9 @@ pipeline {
                         docker save tasks-app-prod:latest | gzip > /tmp/tasks-app-prod.tar.gz
                         scp /tmp/tasks-app-prod.tar.gz jenkins-deploy@172.18.0.10:/tmp/
                         ssh jenkins-deploy@172.18.0.10 'gunzip -c /tmp/tasks-app-prod.tar.gz | docker load'
+                        
+                        # Detener y eliminar contenedores existentes antes de iniciar nuevos
+                        ssh jenkins-deploy@172.18.0.10 'docker rm -f tasks-app-prod || true'
                         
                         # Desplegar con docker compose
                         ssh jenkins-deploy@172.18.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
