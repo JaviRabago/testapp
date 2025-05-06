@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs "node18"
+    }
+
     environment {
         // Credenciales y configuraciones
         GITHUB_REPO = 'https://github.com/tu-usuario/tu-repositorio.git'
