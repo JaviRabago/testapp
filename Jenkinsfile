@@ -40,6 +40,17 @@ pipeline {
             }
         }
 
+        stage('Test SSH Connection') {
+            steps {
+                echo 'Probando conexión SSH...'
+                sshagent(['jenkins-ssh-key']) {
+                    sh """
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'echo "Conexión SSH exitosa"'
+                    """
+                }
+            }
+        }
+
         stage('Deploy to Development') {
             steps {
                 echo 'Desplegando en entorno de desarrollo...'
