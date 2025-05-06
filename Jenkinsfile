@@ -108,36 +108,63 @@ pipeline {
             }
         }
 
-        stage('Deploy to Production') {
-            when {
-                branch 'main'
-            }
+        stage('Deploy to Development') {
             steps {
-                echo 'Desplegando en entorno de producción...'
+                echo 'Desplegando en entorno de desarrollo...'
                 
                 sshagent(['jenkins-ssh-key']) {
-                    // Copiar docker-compose.prod.yml al servidor de producción
+                    // Verificar conectividad SSH básica
                     sh """
-                        scp -o StrictHostKeyChecking=no docker-compose.prod.yml ${DEPLOY_USER}@${PROD_SERVER}:/tmp/docker-compose.yml
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${PROD_SERVER} 'mkdir -p /opt/${APP_NAME}'
-                        scp -o StrictHostKeyChecking=no docker-compose.prod.yml ${DEPLOY_USER}@${PROD_SERVER}:/opt/${APP_NAME}/docker-compose.yml
+                        echo "Verificando conectividad SSH con el servidor de desarrollo..."
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'echo "Conexión SSH exitosa"'
                     """
                     
-                    // Exportar imagen y transferirla al servidor de producción
+                    // Verificar Docker en servidor de desarrollo
                     sh """
-                        docker save ${APP_NAME}-prod:${BUILD_NUMBER} | gzip > /tmp/${APP_NAME}-prod.tar.gz
-                        scp -o StrictHostKeyChecking=no /tmp/${APP_NAME}-prod.tar.gz ${DEPLOY_USER}@${PROD_SERVER}:/tmp/
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${PROD_SERVER} 'gunzip -c /tmp/${APP_NAME}-prod.tar.gz | docker load'
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${PROD_SERVER} 'docker tag ${APP_NAME}-prod:${BUILD_NUMBER} ${APP_NAME}-prod:latest'
+                        echo "Verificando Docker en servidor de desarrollo..."
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'docker --version || echo "Docker no disponible"'
+                    """
+                    
+                    // Verificar espacio en disco
+                    sh """
+                        echo "Verificando espacio en disco en servidor de desarrollo..."
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'df -h'
+                    """
+                    
+                    // Copiar docker-compose.dev.yml al servidor de desarrollo
+                    sh """
+                        echo "Copiando docker-compose.dev.yml al servidor..."
+                        scp -o StrictHostKeyChecking=no docker-compose.dev.yml ${DEPLOY_USER}@${DEV_SERVER}:/tmp/docker-compose.yml
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'mkdir -p /opt/${APP_NAME}'
+                        scp -o StrictHostKeyChecking=no docker-compose.dev.yml ${DEPLOY_USER}@${DEV_SERVER}:/opt/${APP_NAME}/docker-compose.yml
+                        echo "docker-compose.dev.yml copiado correctamente"
+                    """
+                    
+                    // Exportar imagen y transferirla al servidor de desarrollo
+                    sh """
+                        echo "Guardando imagen Docker localmente..."
+                        docker save ${APP_NAME}-dev:${BUILD_NUMBER} | gzip > /tmp/${APP_NAME}-dev.tar.gz
+                        ls -lh /tmp/${APP_NAME}-dev.tar.gz
+                        
+                        echo "Transfiriendo imagen al servidor de desarrollo..."
+                        scp -o StrictHostKeyChecking=no /tmp/${APP_NAME}-dev.tar.gz ${DEPLOY_USER}@${DEV_SERVER}:/tmp/
+                        echo "Imagen transferida correctamente"
+                        
+                        echo "Cargando imagen en Docker del servidor..."
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'gunzip -c /tmp/${APP_NAME}-dev.tar.gz | docker load'
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'docker tag ${APP_NAME}-dev:${BUILD_NUMBER} ${APP_NAME}-dev:latest'
+                        echo "Imagen cargada correctamente"
                     """
                     
                     // Desplegar con docker-compose
                     sh """
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${PROD_SERVER} 'cd /opt/${APP_NAME} && docker-compose down && docker-compose up -d'
+                        echo "Desplegando con docker-compose..."
+                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'cd /opt/${APP_NAME} && docker-compose down && docker-compose up -d'
+                        echo "Aplicación desplegada correctamente"
                     """
                 }
                 
-                echo 'Aplicación desplegada en producción correctamente.'
+                echo 'Aplicación desplegada en desarrollo correctamente.'
             }
         }
 
