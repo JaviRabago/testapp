@@ -26,60 +26,8 @@ pipeline {
                 sh 'node -c index.js'
             }
         }
-        stage('Build Development Image') {
-            steps {
-                echo 'Construyendo imagen Docker para desarrollo...'
-                sh 'docker build -t ${APP_NAME}-dev:${BUILD_NUMBER} -f Dockerfile.dev .'
-                sh 'docker tag ${APP_NAME}-dev:${BUILD_NUMBER} ${APP_NAME}-dev:latest'
-            }
-        }
-        stage('Deploy to Development') {
-            steps {
-                echo 'Desplegando en entorno de desarrollo...'
-                sshagent(credentials: ['jenkins-ssh-key']) {
-                    sh '''
-                        # Preparar entorno SSH
-                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa 172.19.0.10 >> ~/.ssh/known_hosts
-                        
-                        # Crear directorio para la aplicación en el servidor
-                        ssh jenkins-deploy@172.19.0.10 'mkdir -p /opt/tasks-app'
-                        
-                        # Modificar el docker-compose.dev.yml para usar la imagen existente
-                        sed -i 's/build:/image: tasks-app-dev:latest\\n    #build:/' docker-compose.dev.yml
-                        sed -i '/dockerfile:/d' docker-compose.dev.yml
-                        sed -i '/context:/d' docker-compose.dev.yml
-                        
-                        # Copiar docker-compose.dev.yml modificado al servidor
-                        scp docker-compose.dev.yml jenkins-deploy@172.19.0.10:/opt/tasks-app/docker-compose.yml
-                        
-                        # Exportar imagen y transferirla al servidor de desarrollo
-                        docker save tasks-app-dev:latest | gzip > /tmp/tasks-app-dev.tar.gz
-                        scp /tmp/tasks-app-dev.tar.gz jenkins-deploy@172.19.0.10:/tmp/
-                        ssh jenkins-deploy@172.19.0.10 'gunzip -c /tmp/tasks-app-dev.tar.gz | docker load'
-                        
-                        # Detener y eliminar contenedores existentes antes de iniciar nuevos
-                        ssh jenkins-deploy@172.19.0.10 'docker rm -f tasks-app-dev || true'
-                        
-                        # Desplegar con docker compose
-                        ssh jenkins-deploy@172.19.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
-                    '''
-                }
-                echo 'Aplicación desplegada en desarrollo correctamente.'
-            }
-        }
         
-        stage('Test in Development') {
-            steps {
-                echo 'Realizando pruebas en el entorno de desarrollo...'
-                sshagent(credentials: ['jenkins-ssh-key']) {
-                    sh '''
-                        sleep 10
-                        ssh jenkins-deploy@172.19.0.10 'curl -s http://tasks.desarrollo.local:3000 || echo "Aplicación no disponible"'
-                    '''
-                }
-            }
-        }
+        // Omitimos las etapas de desarrollo ya que no son necesarias según tu comentario
         
         stage('Approve Production Deployment') {
             steps {
@@ -110,6 +58,9 @@ pipeline {
                         # Crear directorio para la aplicación en el servidor
                         ssh jenkins-deploy@172.18.0.10 'mkdir -p /opt/tasks-app'
                         
+                        # Primero, comprobemos que la base de datos PostgreSQL está disponible
+                        ssh jenkins-deploy@172.18.0.10 'ping -c 3 172.18.0.20 || echo "AVISO: No se puede conectar al servidor de base de datos"'
+                        
                         # Modificar el docker-compose.prod.yml para usar la imagen existente
                         sed -i 's/build:/image: tasks-app-prod:latest\\n    #build:/' docker-compose.prod.yml
                         sed -i '/dockerfile:/d' docker-compose.prod.yml
@@ -117,6 +68,10 @@ pipeline {
                         
                         # Copiar docker-compose.prod.yml modificado al servidor
                         scp docker-compose.prod.yml jenkins-deploy@172.18.0.10:/opt/tasks-app/docker-compose.yml
+                        
+                        # Copiar el script wrapper para asegurarnos de que tiene los permisos correctos
+                        scp app-prod-wrapper.sh jenkins-deploy@172.18.0.10:/tmp/app-prod-wrapper.sh
+                        ssh jenkins-deploy@172.18.0.10 'chmod +x /tmp/app-prod-wrapper.sh'
                         
                         # Exportar imagen y transferirla al servidor de producción
                         docker save tasks-app-prod:latest | gzip > /tmp/tasks-app-prod.tar.gz
@@ -128,6 +83,9 @@ pipeline {
                         
                         # Desplegar con docker compose
                         ssh jenkins-deploy@172.18.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
+                        
+                        # Verificar logs para detectar problemas
+                        ssh jenkins-deploy@172.18.0.10 'sleep 5 && docker logs tasks-app-prod'
                     '''
                 }
                 echo 'Aplicación desplegada en producción correctamente.'
@@ -139,7 +97,7 @@ pipeline {
                 echo 'Realizando pruebas en el entorno de producción...'
                 sshagent(credentials: ['jenkins-ssh-key']) {
                     sh '''
-                        sleep 10
+                        sleep 20  # Damos más tiempo para que la aplicación se inicie y se conecte a la BD
                         ssh jenkins-deploy@172.18.0.10 'curl -s http://172.18.0.10:3000 || echo "Aplicación no disponible"'
                     '''
                 }
