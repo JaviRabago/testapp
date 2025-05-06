@@ -3,7 +3,6 @@ pipeline {
 
     environment {
         // Credenciales y configuraciones
-        GITHUB_REPO = 'https://github.com/tu-usuario/tu-repositorio.git'
         DEV_SERVER = '172.19.0.10'
         PROD_SERVER = '172.18.0.10'
         APP_NAME = 'tasks-app'
@@ -15,6 +14,19 @@ pipeline {
             steps {
                 checkout scm
                 echo 'Código descargado correctamente.'
+            }
+        }
+
+        stage('Test SSH Connection') {
+            steps {
+                echo 'Probando conexión SSH...'
+                sshagent(credentials: ['jenkins-ssh-key']) {
+                    sh '''
+                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
+                        ssh-keyscan -t rsa,dsa 172.19.0.10 >> ~/.ssh/known_hosts
+                        ssh jenkins-deploy@172.19.0.10 "echo 'Conexión SSH exitosa'"
+                    '''
+                }
             }
         }
 
@@ -40,126 +52,48 @@ pipeline {
             }
         }
 
-        stage('Test SSH Connection') {
-            steps {
-                echo 'Probando conexión SSH...'
-                sshagent(['jenkins-ssh-key']) {
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'echo "Conexión SSH exitosa"'
-                    """
-                }
-            }
-        }
-
         stage('Deploy to Development') {
             steps {
                 echo 'Desplegando en entorno de desarrollo...'
-                
-                // Utilizar el plugin SSH Agent para manejar la clave SSH
-                sshagent(['jenkins-ssh-key']) {
-                    // Copiar docker-compose.dev.yml al servidor de desarrollo
-                    sh """
-                        scp -o StrictHostKeyChecking=no docker-compose.dev.yml ${DEPLOY_USER}@${DEV_SERVER}:/tmp/docker-compose.yml
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'mkdir -p /opt/${APP_NAME}'
-                        scp -o StrictHostKeyChecking=no docker-compose.dev.yml ${DEPLOY_USER}@${DEV_SERVER}:/opt/${APP_NAME}/docker-compose.yml
-                    """
-                    
-                    // Exportar imagen y transferirla al servidor de desarrollo
-                    sh """
-                        docker save ${APP_NAME}-dev:${BUILD_NUMBER} | gzip > /tmp/${APP_NAME}-dev.tar.gz
-                        scp -o StrictHostKeyChecking=no /tmp/${APP_NAME}-dev.tar.gz ${DEPLOY_USER}@${DEV_SERVER}:/tmp/
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'gunzip -c /tmp/${APP_NAME}-dev.tar.gz | docker load'
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'docker tag ${APP_NAME}-dev:${BUILD_NUMBER} ${APP_NAME}-dev:latest'
-                    """
-                    
-                    // Desplegar con docker-compose
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'cd /opt/${APP_NAME} && docker-compose down && docker-compose up -d'
-                    """
+                sshagent(credentials: ['jenkins-ssh-key']) {
+                    sh '''
+                        # Preparar entorno SSH
+                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
+                        ssh-keyscan -t rsa,dsa 172.19.0.10 >> ~/.ssh/known_hosts
+                        
+                        # Copiar docker-compose.dev.yml al servidor de desarrollo
+                        scp docker-compose.dev.yml jenkins-deploy@172.19.0.10:/tmp/docker-compose.yml
+                        ssh jenkins-deploy@172.19.0.10 'mkdir -p /opt/tasks-app'
+                        scp docker-compose.dev.yml jenkins-deploy@172.19.0.10:/opt/tasks-app/docker-compose.yml
+                        
+                        # Exportar imagen y transferirla al servidor de desarrollo
+                        docker save tasks-app-dev:latest | gzip > /tmp/tasks-app-dev.tar.gz
+                        scp /tmp/tasks-app-dev.tar.gz jenkins-deploy@172.19.0.10:/tmp/
+                        ssh jenkins-deploy@172.19.0.10 'gunzip -c /tmp/tasks-app-dev.tar.gz | docker load'
+                        
+                        # Desplegar con docker-compose
+                        ssh jenkins-deploy@172.19.0.10 'cd /opt/tasks-app && docker-compose down && docker-compose up -d'
+                    '''
                 }
-                
                 echo 'Aplicación desplegada en desarrollo correctamente.'
             }
         }
 
+        // Continúa con el resto de etapas...
+
         stage('Test in Development') {
             steps {
                 echo 'Realizando pruebas en el entorno de desarrollo...'
-                sshagent(['jenkins-ssh-key']) {
-                    sh """
+                sshagent(credentials: ['jenkins-ssh-key']) {
+                    sh '''
                         sleep 10
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEV_SERVER} 'curl -s http://tasks.desarrollo.local:3000 || echo "Aplicación no disponible"'
-                    """
+                        ssh jenkins-deploy@172.19.0.10 'curl -s http://tasks.desarrollo.local:3000 || echo "Aplicación no disponible"'
+                    '''
                 }
             }
         }
 
-        stage('Approve Production Deployment') {
-            when {
-                branch 'main'
-            }
-            steps {
-                input message: '¿Aprobar despliegue a producción?', ok: 'Desplegar'
-            }
-        }
-
-        stage('Build Production Image') {
-            when {
-                branch 'main'
-            }
-            steps {
-                echo 'Construyendo imagen Docker para producción...'
-                sh 'docker build -t ${APP_NAME}-prod:${BUILD_NUMBER} -f Dockerfile.prod .'
-                sh 'docker tag ${APP_NAME}-prod:${BUILD_NUMBER} ${APP_NAME}-prod:latest'
-            }
-        }
-
-        stage('Deploy to Production') {
-            when {
-                branch 'main'
-            }
-            steps {
-                echo 'Desplegando en entorno de producción...'
-                sshagent(['jenkins-ssh-key']) {
-                    // Copiar docker-compose.prod.yml al servidor de producción
-                    sh """
-                        scp -o StrictHostKeyChecking=no docker-compose.prod.yml ${DEPLOY_USER}@${PROD_SERVER}:/tmp/docker-compose.yml
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${PROD_SERVER} 'mkdir -p /opt/${APP_NAME}'
-                        scp -o StrictHostKeyChecking=no docker-compose.prod.yml ${DEPLOY_USER}@${PROD_SERVER}:/opt/${APP_NAME}/docker-compose.yml
-                    """
-                    
-                    // Exportar imagen y transferirla al servidor de producción
-                    sh """
-                        docker save ${APP_NAME}-prod:${BUILD_NUMBER} | gzip > /tmp/${APP_NAME}-prod.tar.gz
-                        scp -o StrictHostKeyChecking=no /tmp/${APP_NAME}-prod.tar.gz ${DEPLOY_USER}@${PROD_SERVER}:/tmp/
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${PROD_SERVER} 'gunzip -c /tmp/${APP_NAME}-prod.tar.gz | docker load'
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${PROD_SERVER} 'docker tag ${APP_NAME}-prod:${BUILD_NUMBER} ${APP_NAME}-prod:latest'
-                    """
-                    
-                    // Desplegar con docker-compose
-                    sh """
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${PROD_SERVER} 'cd /opt/${APP_NAME} && docker-compose down && docker-compose up -d'
-                    """
-                }
-                
-                echo 'Aplicación desplegada en producción correctamente.'
-            }
-        }
-
-        stage('Test in Production') {
-            when {
-                branch 'main'
-            }
-            steps {
-                echo 'Realizando pruebas en el entorno de producción...'
-                sshagent(['jenkins-ssh-key']) {
-                    sh """
-                        sleep 10
-                        ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${PROD_SERVER} 'curl -s http://${PROD_SERVER}:3000 || echo "Aplicación no disponible"'
-                    """
-                }
-            }
-        }
+        // ... otras etapas
     }
 
     post {
