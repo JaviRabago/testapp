@@ -45,7 +45,12 @@ pipeline {
                         # Crear directorio para la aplicación en el servidor
                         ssh jenkins-deploy@172.19.0.10 'mkdir -p /opt/tasks-app'
                         
-                        # Copiar docker-compose.dev.yml al servidor de desarrollo
+                        # Modificar el docker-compose.dev.yml para usar la imagen existente
+                        sed -i 's/build:/image: tasks-app-dev:latest\\n    #build:/' docker-compose.dev.yml
+                        sed -i '/dockerfile:/d' docker-compose.dev.yml
+                        sed -i '/context:/d' docker-compose.dev.yml
+                        
+                        # Copiar docker-compose.dev.yml modificado al servidor
                         scp docker-compose.dev.yml jenkins-deploy@172.19.0.10:/opt/tasks-app/docker-compose.yml
                         
                         # Exportar imagen y transferirla al servidor de desarrollo
@@ -53,7 +58,7 @@ pipeline {
                         scp /tmp/tasks-app-dev.tar.gz jenkins-deploy@172.19.0.10:/tmp/
                         ssh jenkins-deploy@172.19.0.10 'gunzip -c /tmp/tasks-app-dev.tar.gz | docker load'
                         
-                        # Desplegar con docker compose - usar el docker-compose.yml que ya copiamos
+                        # Desplegar con docker compose
                         ssh jenkins-deploy@172.19.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
                     '''
                 }
@@ -102,7 +107,12 @@ pipeline {
                         # Crear directorio para la aplicación en el servidor
                         ssh jenkins-deploy@172.18.0.10 'mkdir -p /opt/tasks-app'
                         
-                        # Copiar docker-compose.prod.yml al servidor de producción
+                        # Modificar el docker-compose.prod.yml para usar la imagen existente
+                        sed -i 's/build:/image: tasks-app-prod:latest\\n    #build:/' docker-compose.prod.yml
+                        sed -i '/dockerfile:/d' docker-compose.prod.yml
+                        sed -i '/context:/d' docker-compose.prod.yml
+                        
+                        # Copiar docker-compose.prod.yml modificado al servidor
                         scp docker-compose.prod.yml jenkins-deploy@172.18.0.10:/opt/tasks-app/docker-compose.yml
                         
                         # Exportar imagen y transferirla al servidor de producción
@@ -110,7 +120,7 @@ pipeline {
                         scp /tmp/tasks-app-prod.tar.gz jenkins-deploy@172.18.0.10:/tmp/
                         ssh jenkins-deploy@172.18.0.10 'gunzip -c /tmp/tasks-app-prod.tar.gz | docker load'
                         
-                        # Desplegar con docker compose - usar el docker-compose.yml que ya copiamos
+                        # Desplegar con docker compose
                         ssh jenkins-deploy@172.18.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
                     '''
                 }
