@@ -42,9 +42,10 @@ pipeline {
                         [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
                         ssh-keyscan -t rsa,dsa 172.19.0.10 >> ~/.ssh/known_hosts
                         
-                        # Copiar docker-compose.dev.yml al servidor de desarrollo
-                        scp docker-compose.dev.yml jenkins-deploy@172.19.0.10:/tmp/docker-compose.yml
+                        # Crear directorio para la aplicación en el servidor
                         ssh jenkins-deploy@172.19.0.10 'mkdir -p /opt/tasks-app'
+                        
+                        # Copiar docker-compose.dev.yml al servidor de desarrollo
                         scp docker-compose.dev.yml jenkins-deploy@172.19.0.10:/opt/tasks-app/docker-compose.yml
                         
                         # Exportar imagen y transferirla al servidor de desarrollo
@@ -52,8 +53,8 @@ pipeline {
                         scp /tmp/tasks-app-dev.tar.gz jenkins-deploy@172.19.0.10:/tmp/
                         ssh jenkins-deploy@172.19.0.10 'gunzip -c /tmp/tasks-app-dev.tar.gz | docker load'
                         
-                        # Desplegar con docker compose
-                        ssh jenkins-deploy@172.19.0.10 'cd /opt/tasks-app && docker compose down && docker compose up -d'
+                        # Desplegar con docker compose - usar el docker-compose.yml que ya copiamos
+                        ssh jenkins-deploy@172.19.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
                     '''
                 }
                 echo 'Aplicación desplegada en desarrollo correctamente.'
@@ -98,9 +99,10 @@ pipeline {
                         [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
                         ssh-keyscan -t rsa,dsa 172.18.0.10 >> ~/.ssh/known_hosts
                         
-                        # Copiar docker-compose.prod.yml al servidor de producción
-                        scp docker-compose.prod.yml jenkins-deploy@172.18.0.10:/tmp/docker-compose.yml
+                        # Crear directorio para la aplicación en el servidor
                         ssh jenkins-deploy@172.18.0.10 'mkdir -p /opt/tasks-app'
+                        
+                        # Copiar docker-compose.prod.yml al servidor de producción
                         scp docker-compose.prod.yml jenkins-deploy@172.18.0.10:/opt/tasks-app/docker-compose.yml
                         
                         # Exportar imagen y transferirla al servidor de producción
@@ -108,8 +110,8 @@ pipeline {
                         scp /tmp/tasks-app-prod.tar.gz jenkins-deploy@172.18.0.10:/tmp/
                         ssh jenkins-deploy@172.18.0.10 'gunzip -c /tmp/tasks-app-prod.tar.gz | docker load'
                         
-                        # Desplegar con docker compose
-                        ssh jenkins-deploy@172.18.0.10 'cd /opt/tasks-app && docker compose down && docker compose up -d'
+                        # Desplegar con docker compose - usar el docker-compose.yml que ya copiamos
+                        ssh jenkins-deploy@172.18.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
                     '''
                 }
                 echo 'Aplicación desplegada en producción correctamente.'
@@ -132,8 +134,6 @@ pipeline {
             steps {
                 echo 'Notificando despliegue completado...'
                 // Aquí podrías agregar código para enviar notificaciones por email, Slack, etc.
-                // Por ejemplo:
-                // mail to: 'tu@email.com', subject: 'Despliegue completado', body: 'La aplicación ha sido desplegada correctamente en producción.'
             }
         }
     }
@@ -141,11 +141,9 @@ pipeline {
     post {
         success {
             echo 'Pipeline completado con éxito!'
-            // Aquí puedes agregar acciones adicionales para cuando el pipeline sea exitoso
         }
         failure {
             echo 'Pipeline falló. Revisar logs para más detalles.'
-            // Aquí puedes agregar notificaciones o acciones para fallos
         }
         always {
             echo 'Limpiando espacio de trabajo...'
