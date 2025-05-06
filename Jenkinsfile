@@ -65,22 +65,22 @@ pipeline {
                 
                 // Copiar docker-compose.dev.yml al servidor de desarrollo
                 sh """
-                    scp -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} docker-compose.dev.yml user@${DEV_SERVER}:/tmp/docker-compose.yml
-                    ssh -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} user@${DEV_SERVER} 'mkdir -p /opt/${APP_NAME}'
-                    scp -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} docker-compose.dev.yml user@${DEV_SERVER}:/opt/${APP_NAME}/docker-compose.yml
+                    scp -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} docker-compose.dev.yml op1@${DEV_SERVER}:/tmp/docker-compose.yml
+                    ssh -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} op1@${DEV_SERVER} 'mkdir -p /opt/${APP_NAME}'
+                    scp -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} docker-compose.dev.yml op1@${DEV_SERVER}:/opt/${APP_NAME}/docker-compose.yml
                 """
                 
                 // Exportar imagen y transferirla al servidor de desarrollo
                 sh """
                     docker save ${APP_NAME}-dev:${BUILD_NUMBER} | gzip > /tmp/${APP_NAME}-dev.tar.gz
-                    scp -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} /tmp/${APP_NAME}-dev.tar.gz user@${DEV_SERVER}:/tmp/
-                    ssh -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} user@${DEV_SERVER} 'gunzip -c /tmp/${APP_NAME}-dev.tar.gz | docker load'
-                    ssh -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} user@${DEV_SERVER} 'docker tag ${APP_NAME}-dev:${BUILD_NUMBER} ${APP_NAME}-dev:latest'
+                    scp -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} /tmp/${APP_NAME}-dev.tar.gz op1@${DEV_SERVER}:/tmp/
+                    ssh -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} op1@${DEV_SERVER} 'gunzip -c /tmp/${APP_NAME}-dev.tar.gz | docker load'
+                    ssh -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} op1@${DEV_SERVER} 'docker tag ${APP_NAME}-dev:${BUILD_NUMBER} ${APP_NAME}-dev:latest'
                 """
                 
                 // Desplegar con docker-compose
                 sh """
-                    ssh -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} user@${DEV_SERVER} 'cd /opt/${APP_NAME} && docker-compose down && docker-compose up -d'
+                    ssh -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} op1@${DEV_SERVER} 'cd /opt/${APP_NAME} && docker-compose down && docker-compose up -d'
                 """
                 
                 echo 'Aplicación desplegada en desarrollo correctamente.'
@@ -93,7 +93,7 @@ pipeline {
                 // Esperar a que la aplicación esté disponible
                 sh """
                     sleep 10
-                    ssh -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} user@${DEV_SERVER} 'curl -s http://tasks.desarrollo.local:3000 || echo "Aplicación no disponible"'
+                    ssh -o StrictHostKeyChecking=no -i ${DEV_SSH_CREDS} op1@${DEV_SERVER} 'curl -s http://tasks.desarrollo.local:3000 || echo "Aplicación no disponible"'
                 """
             }
         }
@@ -130,22 +130,22 @@ pipeline {
                 
                 // Copiar docker-compose.prod.yml al servidor de producción
                 sh """
-                    scp -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} docker-compose.prod.yml user@${PROD_SERVER}:/tmp/docker-compose.yml
-                    ssh -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} user@${PROD_SERVER} 'mkdir -p /opt/${APP_NAME}'
-                    scp -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} docker-compose.prod.yml user@${PROD_SERVER}:/opt/${APP_NAME}/docker-compose.yml
+                    scp -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} docker-compose.prod.yml op1@${PROD_SERVER}:/tmp/docker-compose.yml
+                    ssh -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} op1@${PROD_SERVER} 'mkdir -p /opt/${APP_NAME}'
+                    scp -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} docker-compose.prod.yml op1@${PROD_SERVER}:/opt/${APP_NAME}/docker-compose.yml
                 """
                 
                 // Exportar imagen y transferirla al servidor de producción
                 sh """
                     docker save ${APP_NAME}-prod:${BUILD_NUMBER} | gzip > /tmp/${APP_NAME}-prod.tar.gz
-                    scp -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} /tmp/${APP_NAME}-prod.tar.gz user@${PROD_SERVER}:/tmp/
-                    ssh -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} user@${PROD_SERVER} 'gunzip -c /tmp/${APP_NAME}-prod.tar.gz | docker load'
-                    ssh -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} user@${PROD_SERVER} 'docker tag ${APP_NAME}-prod:${BUILD_NUMBER} ${APP_NAME}-prod:latest'
+                    scp -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} /tmp/${APP_NAME}-prod.tar.gz op1@${PROD_SERVER}:/tmp/
+                    ssh -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} op1@${PROD_SERVER} 'gunzip -c /tmp/${APP_NAME}-prod.tar.gz | docker load'
+                    ssh -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} op1@${PROD_SERVER} 'docker tag ${APP_NAME}-prod:${BUILD_NUMBER} ${APP_NAME}-prod:latest'
                 """
                 
                 // Desplegar con docker-compose
                 sh """
-                    ssh -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} user@${PROD_SERVER} 'cd /opt/${APP_NAME} && docker-compose down && docker-compose up -d'
+                    ssh -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} op1@${PROD_SERVER} 'cd /opt/${APP_NAME} && docker-compose down && docker-compose up -d'
                 """
                 
                 echo 'Aplicación desplegada en producción correctamente.'
@@ -161,7 +161,7 @@ pipeline {
                 // Esperar a que la aplicación esté disponible
                 sh """
                     sleep 10
-                    ssh -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} user@${PROD_SERVER} 'curl -s http://${PROD_SERVER}:3000 || echo "Aplicación no disponible"'
+                    ssh -o StrictHostKeyChecking=no -i ${PROD_SSH_CREDS} op1@${PROD_SERVER} 'curl -s http://${PROD_SERVER}:3000 || echo "Aplicación no disponible"'
                 """
             }
         }
