@@ -14,70 +14,18 @@ pipeline {
                 echo 'Código descargado correctamente.'
             }
         }
+        
         stage('Install Dependencies') {
             steps {
                 echo 'Instalando dependencias...'
                 sh 'npm install'
             }
         }
+        
         stage('Lint') {
             steps {
                 echo 'Verificando calidad del código...'
                 sh 'node -c index.js'
-            }
-        }
-        stage('Build Development Image') {
-            steps {
-                echo 'Construyendo imagen Docker para desarrollo...'
-                sh 'docker build -t ${APP_NAME}-dev:${BUILD_NUMBER} -f Dockerfile.dev .'
-                sh 'docker tag ${APP_NAME}-dev:${BUILD_NUMBER} ${APP_NAME}-dev:latest'
-            }
-        }
-        stage('Deploy to Development') {
-            steps {
-                echo 'Desplegando en entorno de desarrollo...'
-                sshagent(credentials: ['jenkins-ssh-key']) {
-                    sh '''
-                        # Preparar entorno SSH
-                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa 172.19.0.10 >> ~/.ssh/known_hosts
-                        
-                        # Crear directorio para la aplicación en el servidor
-                        ssh jenkins-deploy@172.19.0.10 'mkdir -p /opt/tasks-app'
-                        
-                        # Modificar el docker-compose.dev.yml para usar la imagen existente
-                        sed -i 's/build:/image: tasks-app-dev:latest\\n    #build:/' docker-compose.dev.yml
-                        sed -i '/dockerfile:/d' docker-compose.dev.yml
-                        sed -i '/context:/d' docker-compose.dev.yml
-                        
-                        # Copiar docker-compose.dev.yml modificado al servidor
-                        scp docker-compose.dev.yml jenkins-deploy@172.19.0.10:/opt/tasks-app/docker-compose.yml
-                        
-                        # Exportar imagen y transferirla al servidor de desarrollo
-                        docker save tasks-app-dev:latest | gzip > /tmp/tasks-app-dev.tar.gz
-                        scp /tmp/tasks-app-dev.tar.gz jenkins-deploy@172.19.0.10:/tmp/
-                        ssh jenkins-deploy@172.19.0.10 'gunzip -c /tmp/tasks-app-dev.tar.gz | docker load'
-                        
-                        # Detener y eliminar contenedores existentes antes de iniciar nuevos
-                        ssh jenkins-deploy@172.19.0.10 'docker rm -f tasks-app-dev || true'
-                        
-                        # Desplegar con docker compose
-                        ssh jenkins-deploy@172.19.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
-                    '''
-                }
-                echo 'Aplicación desplegada en desarrollo correctamente.'
-            }
-        }
-        
-        stage('Test in Development') {
-            steps {
-                echo 'Realizando pruebas en el entorno de desarrollo...'
-                sshagent(credentials: ['jenkins-ssh-key']) {
-                    sh '''
-                        sleep 10
-                        ssh jenkins-deploy@172.19.0.10 'curl -s http://tasks.desarrollo.local:3000 || echo "Aplicación no disponible"'
-                    '''
-                }
             }
         }
         
@@ -115,6 +63,34 @@ pipeline {
                         sed -i '/dockerfile:/d' docker-compose.prod.yml
                         sed -i '/context:/d' docker-compose.prod.yml
                         
+                        # Añadir parámetros de reintentos para la conexión a la base de datos
+                        sed -i 's/restart: unless-stopped/restart: unless-stopped\\n    depends_on:\\n      - db-check/' docker-compose.prod.yml
+                        
+                        # Crear script de verificación de base de datos
+                        cat > db-check.sh << 'EOL'
+#!/bin/bash
+echo "Verificando conexión a la base de datos PostgreSQL en 172.18.0.20:5432..."
+until PGPASSWORD=slapadmin psql -h 172.18.0.20 -U dev1 -d tasks_prod_db -c '\q'; do
+  echo "PostgreSQL no disponible todavía, esperando 5 segundos..."
+  sleep 5
+done
+echo "Base de datos PostgreSQL lista!"
+EOL
+                        
+                        # Copiar el script de verificación al servidor de producción
+                        scp db-check.sh jenkins-deploy@172.18.0.10:/opt/tasks-app/
+                        ssh jenkins-deploy@172.18.0.10 'chmod +x /opt/tasks-app/db-check.sh'
+                        
+                        # Agregar servicio de verificación al docker-compose
+                        echo "
+  db-check:
+    image: postgres:14
+    restart: 'no'
+    entrypoint: ['/opt/tasks-app/db-check.sh']
+    volumes:
+      - /opt/tasks-app/db-check.sh:/opt/tasks-app/db-check.sh
+" >> docker-compose.prod.yml
+                        
                         # Copiar docker-compose.prod.yml modificado al servidor
                         scp docker-compose.prod.yml jenkins-deploy@172.18.0.10:/opt/tasks-app/docker-compose.yml
                         
@@ -128,6 +104,11 @@ pipeline {
                         
                         # Desplegar con docker compose
                         ssh jenkins-deploy@172.18.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
+                        
+                        # Verificar logs para diagnóstico
+                        echo "Esperando 10 segundos para que arranque la aplicación..."
+                        sleep 10
+                        ssh jenkins-deploy@172.18.0.10 'docker logs tasks-app-prod'
                     '''
                 }
                 echo 'Aplicación desplegada en producción correctamente.'
@@ -139,7 +120,7 @@ pipeline {
                 echo 'Realizando pruebas en el entorno de producción...'
                 sshagent(credentials: ['jenkins-ssh-key']) {
                     sh '''
-                        sleep 10
+                        sleep 15
                         ssh jenkins-deploy@172.18.0.10 'curl -s http://172.18.0.10:3000 || echo "Aplicación no disponible"'
                     '''
                 }
