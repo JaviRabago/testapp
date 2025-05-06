@@ -208,3 +208,5 @@ const startServer = async () => {
     console.log(`Base de datos inicializada correctamente: ${dbInitialized ? 'Sí' : 'No'}`);
   });
 };
+
+startServer();
