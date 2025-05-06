@@ -14,14 +14,12 @@ pipeline {
                 echo 'Código descargado correctamente.'
             }
         }
-        
         stage('Install Dependencies') {
             steps {
                 echo 'Instalando dependencias...'
                 sh 'npm install'
             }
         }
-        
         stage('Lint') {
             steps {
                 echo 'Verificando calidad del código...'
@@ -29,78 +27,7 @@ pipeline {
             }
         }
         
-        stage('Deploy to Development') {
-            steps {
-                echo 'Desplegando en entorno de desarrollo...'
-                sshagent(credentials: ['jenkins-ssh-key']) {
-                    sh '''
-                        # Preparar entorno SSH
-                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa 172.19.0.10 >> ~/.ssh/known_hosts
-                        
-                        # Crear directorio para la aplicación en el servidor
-                        ssh jenkins-deploy@172.19.0.10 'mkdir -p /opt/tasks-app/src'
-                        
-                        # En desarrollo, copiamos todos los archivos de código fuente
-                        tar czf /tmp/app-source.tar.gz --exclude=node_modules .
-                        scp /tmp/app-source.tar.gz jenkins-deploy@172.19.0.10:/tmp/
-                        ssh jenkins-deploy@172.19.0.10 'tar xzf /tmp/app-source.tar.gz -C /opt/tasks-app/src'
-                        
-                        # Crear un docker-compose.yml modificado para montar el código como volumen
-                        cat > /tmp/dev-compose.yml << 'EOF'
-services:
-  app:
-    image: node:16
-    container_name: tasks-app-dev
-    restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - /opt/tasks-app/src:/app
-    environment:
-      - NODE_ENV=development
-      - PORT=3000
-      - DB_HOST=172.19.0.20
-      - DB_USER=dev_app_user
-      - DB_PASSWORD=slapadmin
-      - DB_NAME=test_db
-      - DB_PORT=3306
-    networks:
-      - traefik_traefik-net
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.tasksapp.rule=Host(\`tasks.desarrollo.local\`)"
-      - "traefik.http.routers.tasksapp.entrypoints=webdev"
-      - "traefik.http.services.tasksapp.loadbalancer.server.port=3000"
-    command: bash -c "cd /app && npm install && npm run dev"
-
-networks:
-  traefik_traefik-net:
-    external: true
-EOF
-                        
-                        # Copiar el docker-compose modificado
-                        scp /tmp/dev-compose.yml jenkins-deploy@172.19.0.10:/opt/tasks-app/docker-compose.yml
-                        
-                        # Detener contenedores existentes y reiniciar
-                        ssh jenkins-deploy@172.19.0.10 'docker rm -f tasks-app-dev || true'
-                        ssh jenkins-deploy@172.19.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
-                    '''
-                }
-                echo 'Aplicación desplegada en desarrollo correctamente.'
-            }
-        }
-        
-        stage('Test in Development') {
-            steps {
-                echo 'Realizando pruebas en el entorno de desarrollo...'
-                sshagent(credentials: ['jenkins-ssh-key']) {
-                    sh '''
-                        sleep 15
-                        ssh jenkins-deploy@172.19.0.10 'curl -s http://tasks.desarrollo.local:3000 || echo "Aplicación no disponible"'
-                    '''
-                }
-            }
-        }
+        // Omitimos las etapas de desarrollo ya que no son necesarias según tu comentario
         
         stage('Approve Production Deployment') {
             steps {
@@ -131,58 +58,34 @@ EOF
                         # Crear directorio para la aplicación en el servidor
                         ssh jenkins-deploy@172.18.0.10 'mkdir -p /opt/tasks-app'
                         
+                        # Primero, comprobemos que la base de datos PostgreSQL está disponible
+                        ssh jenkins-deploy@172.18.0.10 'ping -c 3 172.18.0.20 || echo "AVISO: No se puede conectar al servidor de base de datos"'
+                        
+                        # Modificar el docker-compose.prod.yml para usar la imagen existente
+                        sed -i 's/build:/image: tasks-app-prod:latest\\n    #build:/' docker-compose.prod.yml
+                        sed -i '/dockerfile:/d' docker-compose.prod.yml
+                        sed -i '/context:/d' docker-compose.prod.yml
+                        
+                        # Copiar docker-compose.prod.yml modificado al servidor
+                        scp docker-compose.prod.yml jenkins-deploy@172.18.0.10:/opt/tasks-app/docker-compose.yml
+                        
+                        # Copiar el script wrapper para asegurarnos de que tiene los permisos correctos
+                        scp app-prod-wrapper.sh jenkins-deploy@172.18.0.10:/tmp/app-prod-wrapper.sh
+                        ssh jenkins-deploy@172.18.0.10 'chmod +x /tmp/app-prod-wrapper.sh'
+                        
                         # Exportar imagen y transferirla al servidor de producción
                         docker save tasks-app-prod:latest | gzip > /tmp/tasks-app-prod.tar.gz
                         scp /tmp/tasks-app-prod.tar.gz jenkins-deploy@172.18.0.10:/tmp/
                         ssh jenkins-deploy@172.18.0.10 'gunzip -c /tmp/tasks-app-prod.tar.gz | docker load'
                         
-                        # Crear un docker-compose modificado para producción con mejor manejo de reconexión a BD
-                        cat > /tmp/prod-compose.yml << 'EOF'
-services:
-  app:
-    image: tasks-app-prod:latest
-    container_name: tasks-app-prod
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - DB_HOST=172.18.0.20
-      - DB_USER=dev1
-      - DB_PASSWORD=slapadmin
-      - DB_NAME=tasks_prod_db
-      - DB_PORT=5432
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    depends_on:
-      - db-healthcheck
-
-  # Contenedor temporal para verificar la conexión a la base de datos
-  db-healthcheck:
-    image: postgres:13
-    container_name: db-healthcheck
-    command: sh -c "pg_isready -h 172.18.0.20 -p 5432 -U dev1 -d tasks_prod_db"
-    environment:
-      - PGPASSWORD=slapadmin
-    restart: on-failure
-EOF
+                        # Detener y eliminar contenedores existentes antes de iniciar nuevos
+                        ssh jenkins-deploy@172.18.0.10 'docker rm -f tasks-app-prod || true'
                         
-                        # Copiar el docker-compose modificado
-                        scp /tmp/prod-compose.yml jenkins-deploy@172.18.0.10:/opt/tasks-app/docker-compose.yml
-                        
-                        # Detener contenedores existentes y reiniciar
-                        ssh jenkins-deploy@172.18.0.10 'docker rm -f tasks-app-prod db-healthcheck || true'
+                        # Desplegar con docker compose
                         ssh jenkins-deploy@172.18.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
                         
-                        # Verificar logs para diagnosticar problemas
-                        echo "Esperando a que la aplicación inicie..."
-                        sleep 15
-                        ssh jenkins-deploy@172.18.0.10 'docker logs tasks-app-prod'
+                        # Verificar logs para detectar problemas
+                        ssh jenkins-deploy@172.18.0.10 'sleep 5 && docker logs tasks-app-prod'
                     '''
                 }
                 echo 'Aplicación desplegada en producción correctamente.'
@@ -194,7 +97,7 @@ EOF
                 echo 'Realizando pruebas en el entorno de producción...'
                 sshagent(credentials: ['jenkins-ssh-key']) {
                     sh '''
-                        sleep 15
+                        sleep 20  # Damos más tiempo para que la aplicación se inicie y se conecte a la BD
                         ssh jenkins-deploy@172.18.0.10 'curl -s http://172.18.0.10:3000 || echo "Aplicación no disponible"'
                     '''
                 }
@@ -218,8 +121,7 @@ EOF
         }
         always {
             echo 'Limpiando espacio de trabajo...'
-            sh 'rm -f /tmp/${APP_NAME}-*.tar.gz /tmp/app-source.tar.gz || true'
-            sh 'rm -f /tmp/dev-compose.yml /tmp/prod-compose.yml || true'
+            sh 'rm -f /tmp/${APP_NAME}-*.tar.gz || true'
             cleanWs()
         }
     }
