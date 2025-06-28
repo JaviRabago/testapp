@@ -1,0 +1,6 @@
+# .trivyignore
+
+# Aceptamos temporalmente el riesgo de esta vulnerabilidad en el paquete 'ip'
+# ya que no hay una versión corregida disponible. Se ha evaluado que el riesgo
+# para el uso actual de la aplicación es bajo.
+CVE-2024-29415
