@@ -20,6 +20,12 @@ pipeline {
                 sh 'npm install'
             }
         }
+        stage('Unit Tests') {
+            steps {
+                echo 'Ejecutando pruebas unitarias...'
+                sh 'npm test'
+            }
+        }
         stage('Lint') {
             steps {
                 echo 'Verificando calidad del código...'
