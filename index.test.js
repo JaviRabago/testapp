@@ -86,11 +86,11 @@ describe('Tasks API', () => {
 
   // Prueba para la creación de una nueva tarea POST /tasks
   it('should create a new task and redirect', async () => {
-    // El INSERT no necesita devolver nada en este caso
     mockQuery.mockResolvedValue({});
     
     const res = await request(app)
       .post('/tasks')
+      .type('form') // <--- AÑADIR ESTA LÍNEA
       .send({ title: 'New Test Task', description: 'A brand new task' });
       
     // Esperamos una redirección a la página principal
