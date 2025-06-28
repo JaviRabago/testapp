@@ -1,0 +1,45 @@
+services:
+  # Servicio de la base de datos PostgreSQL para las pruebas
+  db-test:
+    image: postgres:15 # Usamos una imagen oficial de PostgreSQL
+    container_name: tasks-db-test-pg
+    restart: unless-stopped
+    environment:
+      # Variables de entorno para PostgreSQL
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_DB: test_db_integration
+    networks:
+      - test-net
+    ports:
+      - "5433:5432" # Exponemos el puerto para que el test pueda conectarse desde el host
+    healthcheck:
+      # El healthcheck para PostgreSQL usa 'pg_isready'
+      test: ["CMD-SHELL", "pg_isready -U test_user -d test_db_integration"]
+      timeout: 20s
+      retries: 10
+
+  # Servicio de la aplicación configurado para producción (y por tanto, PostgreSQL)
+  app-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: tasks-app-test-pg
+    restart: unless-stopped
+    environment:
+      # ¡IMPORTANTE! Usamos NODE_ENV=production para que app use PostgreSQL
+      - NODE_ENV=production
+      - PORT=3000
+      - DB_HOST=db-test
+      - DB_USER=test_user
+      - DB_PASSWORD=testpassword
+      - DB_NAME=test_db_integration
+      - DB_PORT=5432 # Puerto estándar de PostgreSQL
+    networks:
+      - test-net
+    depends_on:
+      db-test:
+        condition: service_healthy
+
+networks:
+  test-net:
