@@ -51,6 +51,34 @@ pipeline {
                 sh 'docker tag ${APP_NAME}-prod:${BUILD_NUMBER} ${APP_NAME}-prod:latest'
             }
         }
+
+        stage('Security Scan') {
+            steps {
+                echo 'Iniciando escaneo de seguridad del artefacto Docker...'
+                sh '''
+                    # Descargamos el binario de Trivy y lo hacemos ejecutable
+                    wget -qO- https://github.com/aquasecurity/trivy/releases/download/v0.52.2/trivy_0.52.2_Linux-64bit.tar.gz | tar -xzf -
+                    chmod +x trivy
+
+                    echo "Escaneando la imagen ${APP_NAME}-prod:${BUILD_NUMBER}..."
+                    
+                    # Ejecutamos el escaneo.
+                    # --exit-code 1: Hace que el script falle (salida distinta de 0) si se encuentran vulnerabilidades.
+                    # --severity HIGH,CRITICAL: Solo nos fallará el pipeline si encuentra vulnerabilidades ALTAS o CRÍTICAS.
+                    # --scanners vuln: Nos aseguramos de que solo busque vulnerabilidades.
+                    ./trivy image --exit-code 1 --severity HIGH,CRITICAL --scanners vuln ${APP_NAME}-prod:${BUILD_NUMBER}
+                '''
+            }
+            post {
+                always {
+                    echo "Guardando reporte de Trivy como artefacto..."
+                    // Guardamos el resultado en un archivo de texto para poder revisarlo
+                    sh "./trivy image --format table ${APP_NAME}-prod:${BUILD_NUMBER} > trivy-report.txt"
+                    // Archivamos el reporte para que esté disponible en la página del build de Jenkins
+                    archiveArtifacts artifacts: 'trivy-report.txt', allowEmptyArchive: true
+                }
+            }
+        }
         
         stage('Deploy to Production') {
             steps {
