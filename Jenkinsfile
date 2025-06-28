@@ -137,27 +137,16 @@ pipeline {
                 echo 'Desplegando en entorno de producción desde Docker Hub...'
                 sshagent(credentials: ['jenkins-ssh-key']) {
                     sh """
-                        # ... (Preparar entorno SSH sin cambios)
-                        [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa ${PROD_SERVER} >> ~/.ssh/known_hosts
+                        # ... (Preparar entorno SSH sin cambios) ...
                         ssh ${DEPLOY_USER}@${PROD_SERVER} 'mkdir -p /opt/tasks-app'
                         
-                        # Modificamos docker-compose.prod.yml para que use la imagen de Docker Hub
-                        # Usamos | como delimitador para sed porque la variable contiene /
-                        sed -i "s|build:|image: ${DOCKERHUB_USERNAME}/${APP_NAME}-prod:latest\\n    #build:|" docker-compose.prod.yml
-                        sed -i '/dockerfile:/d' docker-compose.prod.yml
-                        sed -i '/context:/d' docker-compose.prod.yml
-                        
-                        # Copiamos el docker-compose.prod.yml modificado al servidor
+                        # Simplemente copiamos el archivo de compose tal como está en el repositorio
                         scp docker-compose.prod.yml ${DEPLOY_USER}@${PROD_SERVER}:/opt/tasks-app/docker-compose.yml
-                        
-                        # ---- LA LÓGICA DE TRANSFERENCIA DE IMAGEN SE ELIMINA ----
-                        # Ya no usamos docker save, scp, ni docker load.
                         
                         # En el servidor de producción:
                         ssh ${DEPLOY_USER}@${PROD_SERVER} '''
                             echo "Descargando la última imagen desde Docker Hub..."
-                            docker pull ${DOCKERHUB_USERNAME}/${APP_NAME}-prod:latest
+                            docker pull javierrabago/tasks-app-prod:latest
                             
                             echo "Desplegando con docker compose..."
                             cd /opt/tasks-app && docker compose down || true && docker compose up -d
