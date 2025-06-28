@@ -6,6 +6,7 @@ pipeline {
         PROD_SERVER = '172.18.0.10'
         APP_NAME = 'tasks-app'
         DEPLOY_USER = 'jenkins-deploy'
+        DOCKERHUB_USERNAME = 'javierrabago'
     }
     stages {
         stage('Checkout') {
@@ -32,8 +33,6 @@ pipeline {
                 sh 'node -c index.js'
             }
         }
-        
-        // Omitimos las etapas de desarrollo ya que no son necesarias según tu comentario
         
         stage('Approve Production Deployment') {
             steps {
@@ -79,48 +78,62 @@ pipeline {
                 }
             }
         }
+
+        stage('Push to Docker Hub') {
+            steps {
+                echo "Subiendo imagen a Docker Hub..."
+                // Usamos la credencial 'dockerhub-credentials' que creamos en Jenkins
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    // Iniciamos sesión en Docker Hub
+                    sh "echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin"
+                    
+                    // Subimos las etiquetas a Docker Hub
+                    sh "docker push ${DOCKERHUB_USERNAME}/${APP_NAME}-prod:${BUILD_NUMBER}"
+                    sh "docker push ${DOCKERHUB_USERNAME}/${APP_NAME}-prod:latest"
+                }
+            }
+            post {
+                always {
+                    // Cerramos sesión por seguridad
+                    sh 'docker logout'
+                }
+            }
+        }
         
         stage('Deploy to Production') {
             steps {
-                echo 'Desplegando en entorno de producción...'
+                echo 'Desplegando en entorno de producción desde Docker Hub...'
                 sshagent(credentials: ['jenkins-ssh-key']) {
-                    sh '''
-                        # Preparar entorno SSH
+                    sh """
+                        # ... (Preparar entorno SSH sin cambios)
                         [ -d ~/.ssh ] || mkdir ~/.ssh && chmod 0700 ~/.ssh
-                        ssh-keyscan -t rsa,dsa 172.18.0.10 >> ~/.ssh/known_hosts
+                        ssh-keyscan -t rsa,dsa ${PROD_SERVER} >> ~/.ssh/known_hosts
+                        ssh ${DEPLOY_USER}@${PROD_SERVER} 'mkdir -p /opt/tasks-app'
                         
-                        # Crear directorio para la aplicación en el servidor
-                        ssh jenkins-deploy@172.18.0.10 'mkdir -p /opt/tasks-app'
-                        
-                        # Primero, comprobemos que la base de datos PostgreSQL está disponible
-                        ssh jenkins-deploy@172.18.0.10 'ping -c 3 172.18.0.20 || echo "AVISO: No se puede conectar al servidor de base de datos"'
-                        
-                        # Modificar el docker-compose.prod.yml para usar la imagen existente
-                        sed -i 's/build:/image: tasks-app-prod:latest\\n    #build:/' docker-compose.prod.yml
+                        # Modificamos docker-compose.prod.yml para que use la imagen de Docker Hub
+                        # Usamos | como delimitador para sed porque la variable contiene /
+                        sed -i "s|build:|image: ${DOCKERHUB_USERNAME}/${APP_NAME}-prod:latest\\n    #build:|" docker-compose.prod.yml
                         sed -i '/dockerfile:/d' docker-compose.prod.yml
                         sed -i '/context:/d' docker-compose.prod.yml
                         
-                        # Copiar docker-compose.prod.yml modificado al servidor
-                        scp docker-compose.prod.yml jenkins-deploy@172.18.0.10:/opt/tasks-app/docker-compose.yml
+                        # Copiamos el docker-compose.prod.yml modificado al servidor
+                        scp docker-compose.prod.yml ${DEPLOY_USER}@${PROD_SERVER}:/opt/tasks-app/docker-compose.yml
                         
-                        # Copiar el script wrapper para asegurarnos de que tiene los permisos correctos
-                        scp app-prod-wrapper.sh jenkins-deploy@172.18.0.10:/tmp/app-prod-wrapper.sh
-                        ssh jenkins-deploy@172.18.0.10 'chmod +x /tmp/app-prod-wrapper.sh'
+                        # ---- LA LÓGICA DE TRANSFERENCIA DE IMAGEN SE ELIMINA ----
+                        # Ya no usamos docker save, scp, ni docker load.
                         
-                        # Exportar imagen y transferirla al servidor de producción
-                        docker save tasks-app-prod:latest | gzip > /tmp/tasks-app-prod.tar.gz
-                        scp /tmp/tasks-app-prod.tar.gz jenkins-deploy@172.18.0.10:/tmp/
-                        ssh jenkins-deploy@172.18.0.10 'gunzip -c /tmp/tasks-app-prod.tar.gz | docker load'
-                        
-                        # Detener y eliminar contenedores existentes antes de iniciar nuevos
-                        ssh jenkins-deploy@172.18.0.10 'docker rm -f tasks-app-prod || true'
-                        
-                        # Desplegar con docker compose
-                        ssh jenkins-deploy@172.18.0.10 'cd /opt/tasks-app && docker compose down || true && docker compose up -d'
-                        
-                        # Verificar logs para detectar problemas
-                        ssh jenkins-deploy@172.18.0.10 'sleep 5 && docker logs tasks-app-prod'
-                    '''
+                        # En el servidor de producción:
+                        ssh ${DEPLOY_USER}@${PROD_SERVER} '''
+                            echo "Descargando la última imagen desde Docker Hub..."
+                            docker pull ${DOCKERHUB_USERNAME}/${APP_NAME}-prod:latest
+                            
+                            echo "Desplegando con docker compose..."
+                            cd /opt/tasks-app && docker compose down || true && docker compose up -d
+                            
+                            echo "Verificando logs..."
+                            sleep 5 && docker logs tasks-app-prod
+                        '''
+                    """
                 }
                 echo 'Aplicación desplegada en producción correctamente.'
             }
