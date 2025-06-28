@@ -46,8 +46,16 @@ pipeline {
         stage('Build Production Image') {
             steps {
                 echo 'Construyendo imagen Docker para producción...'
-                sh 'docker build -t ${APP_NAME}-prod:${BUILD_NUMBER} -f Dockerfile.prod .'
-                sh 'docker tag ${APP_NAME}-prod:${BUILD_NUMBER} ${APP_NAME}-prod:latest'
+                
+                // 1. Construye la imagen con un nombre local simple
+                sh "docker build -t ${APP_NAME}-prod:${BUILD_NUMBER} -f Dockerfile.prod ."
+                
+                // 2. CREA LA ETIQUETA COMPLETA que usará Docker Hub (ESTE ES EL PASO CLAVE)
+                //    Esto crea el alias 'javierrabago/tasks-app-prod:62'
+                sh "docker tag ${APP_NAME}-prod:${BUILD_NUMBER} ${DOCKERHUB_USERNAME}/${APP_NAME}-prod:${BUILD_NUMBER}"
+                
+                // 3. (Opcional pero recomendado) Crea también la etiqueta 'latest' para el nombre completo
+                sh "docker tag ${APP_NAME}-prod:${BUILD_NUMBER} ${DOCKERHUB_USERNAME}/${APP_NAME}-prod:latest"
             }
         }
 
