@@ -26,6 +26,27 @@ pipeline {
                 sh 'npm test'
             }
         }
+        stage('Integration Tests') {
+            steps {
+                echo 'Iniciando entorno de pruebas de integración...'
+                // Usamos el archivo de compose de pruebas. -p le da un nombre único al proyecto
+                sh 'docker compose -f docker-compose.test.yml -p ci-${BUILD_NUMBER} up -d'
+                
+                // Damos un pequeño margen para que los servicios se estabilicen
+                sh 'sleep 10'
+                
+                echo 'Ejecutando pruebas de integración...'
+                // Ejecutamos los tests dentro del contenedor de la app
+                sh 'docker compose -f docker-compose.test.yml -p ci-${BUILD_NUMBER} exec -T app-test npm run test:integration'
+            }
+            post {
+                always {
+                    echo 'Limpiando entorno de pruebas de integración...'
+                    // -v elimina los volúmenes, borrando la base de datos temporal
+                    sh 'docker compose -f docker-compose.test.yml -p ci-${BUILD_NUMBER} down -v --remove-orphans'
+                }
+            }
+        }
         stage('Lint') {
             steps {
                 echo 'Verificando calidad del código...'
