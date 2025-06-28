@@ -6,7 +6,8 @@
     "scripts": {
       "start": "node index.js",
       "dev": "nodemon index.js",
-      "test": "jest"
+      "test": "jest",
+      "test:integration": "jest --testTimeout=15000 integration/"
     },
     "dependencies": {
       "express": "^4.18.2",
