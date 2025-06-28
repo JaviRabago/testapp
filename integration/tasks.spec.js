@@ -6,8 +6,8 @@ const APP_URL = 'http://localhost:3000';
 
 // Configuración para conectarnos directamente a la BD de pruebas PostgreSQL
 const dbConfig = {
-  host: '127.0.0.1',
-  port: 5433, // El puerto que expusimos en el docker-compose.test.yml
+  host: 'db-test',
+  port: 5432,
   user: 'test_user',
   password: 'testpassword',
   database: 'test_db_integration'
