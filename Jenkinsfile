@@ -1,3 +1,27 @@
+def sendDiscordNotification(String status, String color, String message) {
+    withCredentials([string(credentialsId: 'discord-webhook-url', variable: 'WEBHOOK_URL')]) {
+        // Construimos el payload JSON para Discord con un formato "embed"
+        def payload = """
+        {
+          "embeds": [
+            {
+              "title": "Pipeline: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+              "url": "${env.BUILD_URL}",
+              "description": "${message}",
+              "color": ${color},
+              "footer": {
+                "text": "Jenkins CI/CD"
+              }
+            }
+          ]
+        }
+        """
+        // Usamos curl para enviar la notificación al webhook
+        sh "curl -X POST -H 'Content-Type: application/json' -d '${payload}' \${WEBHOOK_URL}"
+    }
+}
+
+
 pipeline {
     agent any
     environment {
@@ -162,7 +186,14 @@ pipeline {
         stage('Notify Deployment') {
             steps {
                 echo 'Notificando despliegue completado...'
-                // Aquí podrías agregar código para enviar notificaciones por email, Slack, etc.
+                script {
+                    // Llamamos a nuestra función de ayuda para el caso de éxito
+                    sendDiscordNotification(
+                        "SUCCESS",
+                        "3066993", // Color verde
+                        "La aplicación **${APP_NAME}-prod:${BUILD_NUMBER}** ha sido desplegada en producción con éxito."
+                    )
+                }
             }
         }
     }
@@ -173,9 +204,18 @@ pipeline {
         }
         failure {
             echo 'Pipeline falló. Revisar logs para más detalles.'
+            script {
+                // Llamamos a nuestra función de ayuda para el caso de fallo
+                sendDiscordNotification(
+                    "FAILURE",
+                    "15158332", // Color rojo
+                    "El pipeline ha fallado durante la ejecución. Por favor, revisa los logs."
+                )
+            }
         }
         always {
             echo 'Limpiando espacio de trabajo...'
+            sh 'docker logout'
             sh 'rm -f /tmp/${APP_NAME}-*.tar.gz || true'
             cleanWs()
         }
