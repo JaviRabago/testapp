@@ -11,8 +11,6 @@ services:
       POSTGRES_DB: test_db_integration
     networks:
       - test-net
-    ports:
-      - "5433:5432" # Exponemos el puerto para que el test pueda conectarse desde el host
     healthcheck:
       # El healthcheck para PostgreSQL usa 'pg_isready'
       test: ["CMD-SHELL", "pg_isready -U test_user -d test_db_integration"]
