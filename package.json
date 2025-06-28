@@ -4,21 +4,23 @@
     "description": "Simple tasks application with database connection",
     "main": "index.js",
     "scripts": {
-      "start": "node index.js",
-      "dev": "nodemon index.js",
-      "test": "jest",
-      "test:integration": "jest --testTimeout=15000 integration/"
+        "start": "node index.js",
+        "dev": "nodemon index.js",
+        "test": "jest",
+        "test:integration": "jest --testTimeout=15000 integration/"
     },
     "dependencies": {
-      "express": "^4.18.2",
-      "pg": "^8.11.3",
-      "mysql": "^2.18.1",
-      "ejs": "^3.1.9",
-      "body-parser": "^1.20.2"
+        "body-parser": "^1.20.2",
+        "ejs": "^3.1.9",
+        "express": "^4.18.2",
+        "ip": "^2.0.1",
+        "mysql": "^2.18.1",
+        "pg": "^8.11.3",
+        "semver": "^7.7.2"
     },
     "devDependencies": {
-      "nodemon": "^3.0.2",
-      "jest": "^29.7.0",
-      "supertest": "^7.0.0"
+        "jest": "^29.7.0",
+        "nodemon": "^3.0.2",
+        "supertest": "^7.0.0"
     }
-  }
+}
