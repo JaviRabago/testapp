@@ -66,7 +66,7 @@ pipeline {
                     # --exit-code 1: Hace que el script falle (salida distinta de 0) si se encuentran vulnerabilidades.
                     # --severity CRITICAL: Solo nos fallará el pipeline si encuentra vulnerabilidades CRÍTICAS.
                     # --scanners vuln: Nos aseguramos de que solo busque vulnerabilidades.
-                    ./trivy image --exit-code 1 --severity CRITICAL --scanners vuln ${APP_NAME}-prod:${BUILD_NUMBER}
+                    ./trivy image --exit-code 1 --severity HIGH,CRITICAL --scanners vuln ${APP_NAME}-prod:${BUILD_NUMBER}
                 '''
             }
             post {
