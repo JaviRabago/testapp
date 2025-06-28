@@ -1,8 +1,6 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile.prod
+    image: javierrabago/tasks-app-prod:latest
     container_name: tasks-app-prod
     restart: unless-stopped
     ports:
